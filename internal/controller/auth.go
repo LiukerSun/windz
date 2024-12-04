@@ -14,8 +14,9 @@ import (
 
 // LoginRequest 登录请求
 type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username       string `json:"username" binding:"required"`
+	Password       string `json:"password" binding:"required"`
+	OrganizationID uint   `json:"organization_id"`
 }
 
 // RegisterRequest 注册请求
@@ -23,7 +24,7 @@ type RegisterRequest struct {
 	Username       string `json:"username" binding:"required,min=3,max=32"`
 	Password       string `json:"password" binding:"required,min=6,max=32"`
 	Email          string `json:"email" binding:"required,email"`
-	OrganizationID uint   `json:"organization_id"`
+	OrganizationID uint   `json:"organization_id" binding:"required"` // 设为必填项
 }
 
 // LoginResponse 登录响应
@@ -48,7 +49,16 @@ func (a *Auth) Login(c *gin.Context) {
 
 	// 查找用户
 	var user model.User
-	if err := database.DB.Preload("Organization").Where("username = ?", req.Username).First(&user).Error; err != nil {
+	query := database.DB.Preload("Organization")
+
+	// 如果是超级管理员登录，不需要验证组织ID
+	if req.OrganizationID != 0 {
+		query = query.Where("username = ? AND organization_id = ?", req.Username, req.OrganizationID)
+	} else {
+		query = query.Where("username = ? AND role = ?", req.Username, model.RoleSuperAdmin)
+	}
+
+	if err := query.First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
@@ -84,13 +94,24 @@ func (a *Auth) Register(c *gin.Context) {
 		return
 	}
 
-	// 如果不是超级管理员，验证组织是否存在
-	if req.OrganizationID != 0 {
-		var org model.Organization
-		if err := database.DB.First(&org, req.OrganizationID).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "organization not found"})
-			return
-		}
+	// 禁止注册到系统组织（ID为1）
+	if req.OrganizationID == 1 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "registration to system organization is not allowed"})
+		return
+	}
+
+	// 验证组织是否存在
+	var org model.Organization
+	if err := database.DB.First(&org, req.OrganizationID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "organization not found"})
+		return
+	}
+
+	// 检查用户名在组织内是否唯一
+	var existingUser model.User
+	if err := database.DB.Where("username = ? AND organization_id = ?", req.Username, req.OrganizationID).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username already exists in this organization"})
+		return
 	}
 
 	// 对密码进行加密
@@ -127,7 +148,7 @@ func (a *Auth) Register(c *gin.Context) {
 		UserID:       user.ID,
 		Username:     user.Username,
 		Role:         user.Role,
-		Organization: "",
+		Organization: org.Code,
 	})
 }
 

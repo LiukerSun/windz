@@ -50,7 +50,7 @@ func (o *Organization) Create(c *gin.Context) {
 // List 获取组织列表
 func (o *Organization) List(c *gin.Context) {
 	var orgs []model.Organization
-	if err := database.DB.Find(&orgs).Error; err != nil {
+	if err := database.DB.Preload("Users").Find(&orgs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch organizations"})
 		return
 	}

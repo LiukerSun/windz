@@ -12,6 +12,7 @@ func registerUserRoutes(api *gin.RouterGroup) {
 
 	// 公开路由
 	api.POST("/users/login", auth.Login)
+	api.POST("/users/register", auth.Register)
 
 	// 需要认证的路由
 	api.GET("/users/me", middleware.RequireAuth(), auth.GetCurrentUser)

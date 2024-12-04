@@ -15,12 +15,12 @@ const (
 // User 用户模型
 type User struct {
 	gorm.Model
-	Username       string       `gorm:"size:32;not null" json:"username"`              // 用户名
-	Password       string       `gorm:"size:128;not null" json:"-"`                    // 密码
-	Email          string       `gorm:"size:128" json:"email"`                         // 邮箱
-	Role           string       `gorm:"size:32;not null" json:"role"`                  // 角色
-	OrganizationID uint         `gorm:"default:0" json:"organization_id"`              // 组织ID，超级管理员为0
-	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"organization"` // 所属组织
+	Username       string       `gorm:"size:32;not null" json:"username"`   // 用户名
+	Password       string       `gorm:"size:128;not null" json:"-"`         // 密码
+	Email          string       `gorm:"size:128" json:"email"`              // 邮箱
+	Role           string       `gorm:"size:32;not null" json:"role"`       // 角色
+	OrganizationID uint         `gorm:"default:0" json:"organization_id"`   // 组织ID，超级管理员为0
+	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"-"` // 所属组织，在json中忽略
 }
 
 // TableName 指定表名
