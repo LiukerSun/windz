@@ -35,7 +35,7 @@ func RequireAuth() gin.HandlerFunc {
 		// 从数据库获取用户信息
 		var user model.User
 		if err := database.DB.First(&user, claims.UserID).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized access"})
 			c.Abort()
 			return
 		}

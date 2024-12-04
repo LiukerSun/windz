@@ -109,36 +109,48 @@ func connectSQLite(gormConfig *gorm.Config) (*gorm.DB, error) {
 
 // initSuperAdmin 初始化超级管理员账号
 func initSuperAdmin() {
+	// 检查是否已经存在超级管理员
 	var count int64
 	DB.Model(&model.User{}).Where("role = ?", model.RoleSuperAdmin).Count(&count)
-	if count == 0 {
+	if count > 0 {
+		return // 已存在超级管理员，不需要继续
+	}
+
+	// 使用事务处理所有初始化操作
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		// 创建系统组织
 		systemOrg := model.Organization{
 			Code:        "system",
 			Description: "System Organization",
 		}
-		if err := DB.Create(&systemOrg).Error; err != nil {
-			logger.Error("Failed to create system organization: " + err.Error())
-			panic(err)
+		if err := tx.Create(&systemOrg).Error; err != nil {
+			return fmt.Errorf("failed to create system organization: %w", err)
 		}
 
 		// 创建超级管理员
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
 		if err != nil {
-			logger.Error("Failed to hash password: " + err.Error())
-			panic(err)
+			return fmt.Errorf("failed to hash password: %w", err)
 		}
 
 		superAdmin := model.User{
-			Username:       "admin",
-			Password:       string(hashedPassword),
-			Email:          "admin@system.com",
-			Role:           model.RoleSuperAdmin,
-			OrganizationID: systemOrg.ID,
+			Username: "admin",
+			Password: string(hashedPassword),
+			Email:    "admin@system.com",
+			Role:     model.RoleSuperAdmin,
 		}
-		if err := DB.Create(&superAdmin).Error; err != nil {
-			logger.Error("Failed to create super admin: " + err.Error())
-			panic(err)
+
+		if err := tx.Create(&superAdmin).Error; err != nil {
+			return fmt.Errorf("failed to create super admin: %w", err)
 		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("Failed to initialize system: " + err.Error())
+		panic(err)
 	}
+
+	logger.Info("System initialized successfully with super admin")
 }

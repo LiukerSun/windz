@@ -19,7 +19,7 @@ type User struct {
 	Password       string       `gorm:"size:128;not null" json:"-"`         // 密码
 	Email          string       `gorm:"size:128" json:"email"`              // 邮箱
 	Role           string       `gorm:"size:32;not null" json:"role"`       // 角色
-	OrganizationID uint         `gorm:"default:0" json:"organization_id"`   // 组织ID，超级管理员为0
+	OrganizationID uint         `gorm:"default:0" json:"organization_id"`   // 组织ID
 	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"-"` // 所属组织，在json中忽略
 }
 
@@ -30,9 +30,12 @@ func (User) TableName() string {
 
 // BeforeCreate 创建前的钩子
 func (u *User) BeforeCreate(tx *gorm.DB) error {
-	// 超级管理员不需要组织ID
 	if u.Role == RoleSuperAdmin {
-		u.OrganizationID = 0
+		var systemOrg Organization
+		if err := tx.Where("code = ?", "system").First(&systemOrg).Error; err != nil {
+			return fmt.Errorf("system organization not found")
+		}
+		u.OrganizationID = systemOrg.ID
 		return nil
 	}
 
