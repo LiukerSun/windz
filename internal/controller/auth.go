@@ -13,9 +13,9 @@ import (
 
 // LoginRequest 普通用户登录请求
 type LoginRequest struct {
-	Username       string `json:"username" binding:"required"`
-	Password       string `json:"password" binding:"required"`
-	OrganizationID uint   `json:"organization_id" binding:"required"`
+	Username         string `json:"username" binding:"required"`
+	Password         string `json:"password" binding:"required"`
+	OrganizationCode string `json:"organization_code" binding:"required"`
 }
 
 // AdminLoginRequest 管理员登录请求
@@ -90,7 +90,7 @@ func (a *Auth) Login(c *gin.Context) {
 		return
 	}
 
-	user, token, err := a.authService.Login(req.Username, req.Password, req.OrganizationID)
+	user, token, err := a.authService.Login(req.Username, req.Password, req.OrganizationCode)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

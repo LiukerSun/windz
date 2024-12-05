@@ -13,11 +13,17 @@ import (
 type AuthService struct{}
 
 // Login 处理用户登录
-func (s *AuthService) Login(username string, password string, organizationID uint) (*model.User, string, error) {
+func (s *AuthService) Login(username string, password string, organizationCode string) (*model.User, string, error) {
+	// 先查找组织
+	var org model.Organization
+	if err := database.DB.Where("code = ?", organizationCode).First(&org).Error; err != nil {
+		return nil, "", errors.New("组织不存在")
+	}
+
 	var user model.User
 	if err := database.DB.Preload("Organization").
 		Where("username = ? AND organization_id = ? AND (role = ? OR role = ? OR role = ?)",
-			username, organizationID, model.RoleOrgMember, model.RoleOrgAdmin, model.RoleSuperAdmin).
+			username, org.ID, model.RoleOrgMember, model.RoleOrgAdmin, model.RoleSuperAdmin).
 		First(&user).Error; err != nil {
 		return nil, "", errors.New("错误的用户名/密码")
 	}
