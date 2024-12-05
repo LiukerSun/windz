@@ -3,7 +3,6 @@ package database
 import (
 	"backend/internal/model"
 	"backend/pkg/config"
-	"backend/pkg/logger"
 	"fmt"
 	"log"
 	"os"
@@ -20,9 +19,10 @@ import (
 
 var DB *gorm.DB
 
-func Init() {
+// Init 初始化数据库连接
+func Init() error {
 	var err error
-	dbType := config.GetString("database.default")
+	dbType := config.GetString("database.type")
 
 	// 配置GORM日志
 	gormConfig := &gorm.Config{
@@ -32,7 +32,7 @@ func Init() {
 	}
 
 	// 根据配置决定是否启用数据库日志
-	if config.GetBool("log.database_log") {
+	if config.GetBool("database.enable_log") {
 		gormConfig.Logger = gormlogger.New(
 			log.New(os.Stdout, "\r\n", log.LstdFlags),
 			gormlogger.Config{
@@ -54,103 +54,98 @@ func Init() {
 	case "sqlite":
 		DB, err = connectSQLite(gormConfig)
 	default:
-		panic(fmt.Sprintf("不支持的数据库类型: %s", dbType))
+		return fmt.Errorf("unsupported database type: %s", dbType)
 	}
 
 	if err != nil {
-		logger.Error("连接数据库失败: " + err.Error())
-		panic(err)
+		return fmt.Errorf("failed to connect to database: %v", err)
 	}
 
-	logger.Info("数据库连接成功")
-
-	// 自动迁移
-	err = DB.AutoMigrate(
+	// 自动迁移数据库结构
+	if err := DB.AutoMigrate(
 		&model.User{},
 		&model.Organization{},
-	)
-	if err != nil {
-		logger.Error("数据库迁移失败: " + err.Error())
-		panic(err)
+	); err != nil {
+		return fmt.Errorf("failed to auto migrate database: %v", err)
 	}
-	logger.Info("数据库迁移成功")
 
-	// 初始化超级管理员
-	initSuperAdmin()
+	// 初始化超级管理员账号
+	if err := initSuperAdmin(); err != nil {
+		return fmt.Errorf("failed to init super admin: %v", err)
+	}
+
+	return nil
 }
 
 func connectMySQL(gormConfig *gorm.Config) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=True&loc=Local",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		config.GetString("database.mysql.username"),
 		config.GetString("database.mysql.password"),
 		config.GetString("database.mysql.host"),
-		config.GetString("database.mysql.port"),
-		config.GetString("database.mysql.dbname"),
-		config.GetString("database.mysql.charset"),
+		config.GetInt("database.mysql.port"),
+		config.GetString("database.mysql.database"),
 	)
 	return gorm.Open(mysql.Open(dsn), gormConfig)
 }
 
 func connectPostgres(gormConfig *gorm.Config) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Asia/Shanghai",
 		config.GetString("database.postgres.host"),
 		config.GetString("database.postgres.username"),
 		config.GetString("database.postgres.password"),
 		config.GetString("database.postgres.dbname"),
-		config.GetString("database.postgres.port"),
-		config.GetString("database.postgres.sslmode"),
+		config.GetInt("database.postgres.port"),
 	)
 	return gorm.Open(postgres.Open(dsn), gormConfig)
 }
 
 func connectSQLite(gormConfig *gorm.Config) (*gorm.DB, error) {
-	return gorm.Open(sqlite.Open(config.GetString("database.sqlite.path")), gormConfig)
+	return gorm.Open(sqlite.Open(config.GetString("database.sqlite.database")), gormConfig)
 }
 
 // initSuperAdmin 初始化超级管理员账号
-func initSuperAdmin() {
-	// 检查是否已经存在超级管理员
+func initSuperAdmin() error {
 	var count int64
-	DB.Model(&model.User{}).Where("role = ?", model.RoleSuperAdmin).Count(&count)
+	if err := DB.Model(&model.User{}).Where("role = ?", "super_admin").Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to check super admin existence: %w", err)
+	}
+
+	// 如果已经存在超级管理员，则不需要创建
 	if count > 0 {
-		return // 已存在超级管理员，不需要继续
-	}
-
-	// 使用事务处理所有初始化操作
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		// 创建系统组织
-		systemOrg := model.Organization{
-			Code:        "system",
-			Description: "System Organization",
-		}
-		if err := tx.Create(&systemOrg).Error; err != nil {
-			return fmt.Errorf("failed to create system organization: %w", err)
-		}
-
-		// 创建超级管理员
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("failed to hash password: %w", err)
-		}
-
-		superAdmin := model.User{
-			Username: "admin",
-			Password: string(hashedPassword),
-			Email:    "admin@system.com",
-			Role:     model.RoleSuperAdmin,
-		}
-
-		if err := tx.Create(&superAdmin).Error; err != nil {
-			return fmt.Errorf("failed to create super admin: %w", err)
-		}
-
 		return nil
-	})
-
-	if err != nil {
-		logger.Error("Failed to initialize system: " + err.Error())
-		panic(err)
 	}
 
-	logger.Info("System initialized successfully with super admin")
+	// 创建系统组织
+	org := &model.Organization{
+		Code:        "system",
+		Description: "System Organization",
+	}
+	if err := DB.Create(org).Error; err != nil {
+		return fmt.Errorf("failed to create system organization: %w", err)
+	}
+
+	// 获取默认密码
+	defaultPassword := config.GetString("app.default_password")
+	if defaultPassword == "" {
+		defaultPassword = "admin123" // 如果没有配置，使用默认值
+	}
+
+	// 生成密码哈希
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// 创建超级管理员账号
+	admin := &model.User{
+		Username:       "admin",
+		Password:       string(hashedPassword),
+		Role:           "super_admin",
+		OrganizationID: org.ID,
+	}
+	if err := DB.Create(admin).Error; err != nil {
+		return fmt.Errorf("failed to create super admin: %w", err)
+	}
+
+	return nil
 }

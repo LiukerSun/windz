@@ -7,18 +7,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// registerUserRoutes 注册用户相关路由
 func registerUserRoutes(api *gin.RouterGroup) {
-	auth := &controller.Auth{}
+	authController := controller.NewAuth()
 
-	// 公开路由
-	api.POST("/users/login", auth.Login)       // 用户登录
-	api.POST("/users/register", auth.Register) // 用户注册
+	// 认证相关路由
+	auth := api.Group("/auth")
+	{
+		auth.POST("/login", authController.Login)       // 用户登录
+		auth.POST("/register", authController.Register) // 用户注册
 
-	// 需要认证的路由
-	api.GET("/users/me", middleware.RequireAuth(), auth.GetCurrentUser)        // 获取当前用户信息
-	api.POST("/users/password", middleware.RequireAuth(), auth.ChangePassword) // 修改密码
-
-	// 超级管理员路由
-	api.POST("/admin/login", auth.AdminLogin)                                                             // 管理员登录
-	api.POST("/admin/create", middleware.RequireAuth(), middleware.RequireSuperAdmin(), auth.CreateAdmin) // 创建新的超级管理员
+		// 需要认证的路由
+		authRequired := auth.Use(middleware.RequireAuth())
+		{
+			authRequired.POST("/change-password", authController.ChangePassword) // 修改密码
+			authRequired.POST("/reset-password", authController.ResetPassword)   // 重置密码
+			authRequired.POST("/create-admin", authController.CreateAdmin)       // 创建管理员
+		}
+	}
 }

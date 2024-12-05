@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"backend/internal/model"
-	"backend/pkg/database"
+	"backend/internal/service"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,10 +14,36 @@ type CreateOrganizationRequest struct {
 	Description string `json:"description"`
 }
 
+// UpdateOrganizationRequest 更新组织请求
+type UpdateOrganizationRequest struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
+}
+
 // Organization 组织控制器
-type Organization struct{}
+type Organization struct {
+	orgService *service.OrganizationService
+}
+
+// NewOrganization creates a new Organization controller
+func NewOrganization() *Organization {
+	return &Organization{
+		orgService: &service.OrganizationService{},
+	}
+}
 
 // Create 创建组织
+// @Summary      创建组织
+// @Description  创建新的组织
+// @Tags         organizations
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Param        request body CreateOrganizationRequest true "组织信息"
+// @Success      201  {object}  model.Organization
+// @Failure      400  {object}  response.ErrorResponse
+// @Failure      401  {object}  response.ErrorResponse
+// @Router       /organizations [post]
 func (o *Organization) Create(c *gin.Context) {
 	var req CreateOrganizationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -25,22 +51,9 @@ func (o *Organization) Create(c *gin.Context) {
 		return
 	}
 
-	// 检查组织代码是否已存在
-	var count int64
-	database.DB.Model(&model.Organization{}).Where("code = ?", req.Code).Count(&count)
-	if count > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "organization code already exists"})
-		return
-	}
-
-	// 创建组织
-	org := model.Organization{
-		Code:        req.Code,
-		Description: req.Description,
-	}
-
-	if err := database.DB.Create(&org).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create organization"})
+	org, err := o.orgService.Create(req.Code, req.Description)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -48,90 +61,113 @@ func (o *Organization) Create(c *gin.Context) {
 }
 
 // List 获取组织列表
+// @Summary      获取组织列表
+// @Description  获取所有组织的列表
+// @Tags         organizations
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Success      200  {array}   model.Organization
+// @Failure      401  {object}  response.ErrorResponse
+// @Failure      500  {object}  response.ErrorResponse
+// @Router       /organizations [get]
 func (o *Organization) List(c *gin.Context) {
-	var orgs []model.Organization
-	if err := database.DB.Preload("Users").Find(&orgs).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch organizations"})
+	orgs, err := o.orgService.List()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, orgs)
 }
 
 // Get 获取单个组织
+// @Summary      获取组织详情
+// @Description  根据ID获取组织详情
+// @Tags         organizations
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Param        id   path      int  true  "组织ID"
+// @Success      200  {object}  model.Organization
+// @Failure      400  {object}  response.ErrorResponse
+// @Failure      401  {object}  response.ErrorResponse
+// @Failure      404  {object}  response.ErrorResponse
+// @Router       /organizations/{id} [get]
 func (o *Organization) Get(c *gin.Context) {
 	id := c.Param("id")
-	var org model.Organization
-
-	if err := database.DB.First(&org, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+	var orgID uint
+	if _, err := fmt.Sscanf(id, "%d", &orgID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
 		return
 	}
 
+	org, err := o.orgService.Get(orgID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, org)
 }
 
 // Update 更新组织
+// @Summary      更新组织
+// @Description  根据ID更新组织信息
+// @Tags         organizations
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Param        id      path    int                       true  "组织ID"
+// @Param        request body    UpdateOrganizationRequest true  "组织信息"
+// @Success      200     {object} model.Organization
+// @Failure      400     {object} response.ErrorResponse
+// @Failure      401     {object} response.ErrorResponse
+// @Failure      404     {object} response.ErrorResponse
+// @Router       /organizations/{id} [put]
 func (o *Organization) Update(c *gin.Context) {
 	id := c.Param("id")
-	var req CreateOrganizationRequest
+	var orgID uint
+	if _, err := fmt.Sscanf(id, "%d", &orgID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		return
+	}
+
+	var req UpdateOrganizationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 检查组织是否存在
-	var org model.Organization
-	if err := database.DB.First(&org, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+	org, err := o.orgService.Update(orgID, req.Code, req.Description)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 如果修改了组织代码，检查新代码是否已存在
-	if org.Code != req.Code {
-		var count int64
-		database.DB.Model(&model.Organization{}).Where("code = ? AND id != ?", req.Code, id).Count(&count)
-		if count > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "organization code already exists"})
-			return
-		}
-	}
-
-	// 更新组织
-	org.Code = req.Code
-	org.Description = req.Description
-	if err := database.DB.Save(&org).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update organization"})
-		return
-	}
-
 	c.JSON(http.StatusOK, org)
 }
 
 // Delete 删除组织
+// @Summary      删除组织
+// @Description  根据ID删除组织
+// @Tags         organizations
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Param        id   path      int  true  "组织ID"
+// @Success      200  {object}  response.SuccessResponse
+// @Failure      401  {object}  response.ErrorResponse
+// @Failure      404  {object}  response.ErrorResponse
+// @Router       /organizations/{id} [delete]
 func (o *Organization) Delete(c *gin.Context) {
 	id := c.Param("id")
-
-	// 检查组织是否存在
-	var org model.Organization
-	if err := database.DB.First(&org, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+	var orgID uint
+	if _, err := fmt.Sscanf(id, "%d", &orgID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
 		return
 	}
 
-	// 检查组织下是否还有用户
-	var count int64
-	database.DB.Model(&model.User{}).Where("organization_id = ?", id).Count(&count)
-	if count > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot delete organization with existing users"})
+	if err := o.orgService.Delete(orgID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 删除组织
-	if err := database.DB.Delete(&org).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete organization"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "organization deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Organization deleted successfully"})
 }

@@ -2,31 +2,35 @@ package config
 
 import (
 	"github.com/spf13/viper"
-	"log"
 )
 
-var config *viper.Viper
+var Config *viper.Viper
 
-func Init() {
-	config = viper.New()
-	config.SetConfigName("config")
-	config.SetConfigType("yaml")
-	config.AddConfigPath("./config")
+// Init 初始化配置
+func Init() error {
+	Config = viper.New()
+	Config.SetConfigName("config")
+	Config.SetConfigType("yaml")
+	Config.AddConfigPath("./config")
 
-	err := config.ReadInConfig()
-	if err != nil {
-		log.Fatal("Error reading config file: ", err)
+	if err := Config.ReadInConfig(); err != nil {
+		return err
 	}
+
+	return nil
 }
 
+// GetString 获取字符串配置
 func GetString(key string) string {
-	return config.GetString(key)
+	return Config.GetString(key)
 }
 
+// GetInt 获取整数配置
 func GetInt(key string) int {
-	return config.GetInt(key)
+	return Config.GetInt(key)
 }
 
+// GetBool 获取布尔配置
 func GetBool(key string) bool {
-	return config.GetBool(key)
+	return Config.GetBool(key)
 }

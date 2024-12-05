@@ -2,14 +2,13 @@ package controller
 
 import (
 	"backend/internal/model"
+	"backend/internal/service"
 	"backend/pkg/database"
 	"backend/pkg/jwt"
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 // LoginRequest 普通用户登录请求
@@ -55,10 +54,35 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required,min=6,max=32"`
 }
 
+// ResetPasswordRequest 重置密码请求（管理员使用）
+type ResetPasswordRequest struct {
+	UserID      uint   `json:"user_id" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6,max=32"`
+}
+
 // Auth 认证控制器
-type Auth struct{}
+type Auth struct {
+	authService *service.AuthService
+}
+
+// NewAuth creates a new Auth controller
+func NewAuth() *Auth {
+	return &Auth{
+		authService: &service.AuthService{},
+	}
+}
 
 // Login 普通用户登录
+// @Summary      用户登录
+// @Description  普通用户登录接口
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body LoginRequest true "登录信息"
+// @Success      200  {object}  LoginResponse
+// @Failure      400  {object}  response.ErrorResponse
+// @Failure      401  {object}  response.ErrorResponse
+// @Router       /auth/login [post]
 func (a *Auth) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -66,30 +90,12 @@ func (a *Auth) Login(c *gin.Context) {
 		return
 	}
 
-	// 查找用户
-	var user model.User
-	if err := database.DB.Preload("Organization").
-		Where("username = ? AND organization_id = ? AND role = ?",
-			req.Username, req.OrganizationID, model.RoleOrgMember).
-		First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
-		return
-	}
-
-	// 验证密码
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
-		return
-	}
-
-	// 生成 token
-	token, err := jwt.GenerateToken(user.ID, user.Username, user.Role, user.OrganizationID)
+	user, token, err := a.authService.Login(req.Username, req.Password, req.OrganizationID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 返回登录信息
 	c.JSON(http.StatusOK, LoginResponse{
 		Token:        token,
 		UserID:       user.ID,
@@ -147,6 +153,15 @@ func (a *Auth) AdminLogin(c *gin.Context) {
 }
 
 // Register 用户注册
+// @Summary      用户注册
+// @Description  注册新用户
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body RegisterRequest true "注册信息"
+// @Success      201  {object}  model.User
+// @Failure      400  {object}  response.ErrorResponse
+// @Router       /auth/register [post]
 func (a *Auth) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -154,62 +169,13 @@ func (a *Auth) Register(c *gin.Context) {
 		return
 	}
 
-	// 禁止注册到系统组织（ID为1）
-	if req.OrganizationID == 1 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "registration to system organization is not allowed"})
-		return
-	}
-
-	// 验证组织是否存在
-	var org model.Organization
-	if err := database.DB.First(&org, req.OrganizationID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "organization not found"})
-		return
-	}
-
-	// 检查用户名在组织内是否唯一
-	var existingUser model.User
-	if err := database.DB.Where("username = ? AND organization_id = ?", req.Username, req.OrganizationID).First(&existingUser).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "username already exists in this organization"})
-		return
-	}
-
-	// 对密码进行加密
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	user, err := a.authService.Register(req.Username, req.Password, req.Email, req.OrganizationID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
-		return
-	}
-
-	// 创建用户
-	user := model.User{
-		Username:       req.Username,
-		Password:       string(hashedPassword),
-		Email:          req.Email,
-		OrganizationID: req.OrganizationID,
-		Role:           model.RoleOrgMember, // 默认为组织成员
-	}
-
-	if err := database.DB.Create(&user).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 生成 token
-	token, err := jwt.GenerateToken(user.ID, user.Username, user.Role, user.OrganizationID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
-		return
-	}
-
-	// 返回用户信息和 token
-	c.JSON(http.StatusCreated, LoginResponse{
-		Token:        token,
-		UserID:       user.ID,
-		Username:     user.Username,
-		Role:         user.Role,
-		Organization: org.Code,
-	})
+	c.JSON(http.StatusCreated, user)
 }
 
 // GetCurrentUser 获取当前用户信息
@@ -237,52 +203,46 @@ func (a *Auth) GetCurrentUser(c *gin.Context) {
 }
 
 // ChangePassword 用户修改密码
+// @Summary      修改密码
+// @Description  用户修改自己的密码
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Param        request body ChangePasswordRequest true "密码修改信息"
+// @Success      200  {object}  response.SuccessResponse
+// @Failure      400  {object}  response.ErrorResponse
+// @Failure      401  {object}  response.ErrorResponse
+// @Router       /auth/change-password [post]
 func (a *Auth) ChangePassword(c *gin.Context) {
-	// 获取当前用户
-	currentUser, exists := c.Get("currentUser")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	user := currentUser.(*model.User)
-
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 验证旧密码
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid old password"})
+	userID := c.GetUint("user_id")
+	if err := a.authService.ChangePassword(userID, req.OldPassword, req.NewPassword); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 对新密码进行加密
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
-		return
-	}
-
-	// 更新密码
-	if err := database.DB.Model(user).Update("password", string(hashedPassword)).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "password changed successfully",
-	})
-}
-
-// ResetPasswordRequest 重置密码请求（管理员使用）
-type ResetPasswordRequest struct {
-	UserID      uint   `json:"user_id" binding:"required"`
-	NewPassword string `json:"new_password" binding:"required,min=6,max=32"`
+	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
 }
 
 // ResetPassword 重置用户密码（需要管理员权限）
+// @Summary      重置密码
+// @Description  管理员重置用户密码
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Param        request body ResetPasswordRequest true "密码重置信息"
+// @Success      200  {object}  response.SuccessResponse
+// @Failure      400  {object}  response.ErrorResponse
+// @Failure      401  {object}  response.ErrorResponse
+// @Failure      403  {object}  response.ErrorResponse
+// @Router       /auth/reset-password [post]
 func (a *Auth) ResetPassword(c *gin.Context) {
 	var req ResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -290,112 +250,39 @@ func (a *Auth) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	currentUser, exists := c.Get("currentUser")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	admin := currentUser.(*model.User)
-
-	// 获取目标用户
-	var user model.User
-	if err := database.DB.First(&user, req.UserID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user"})
-		}
+	if err := a.authService.ResetPassword(req.UserID, req.NewPassword); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 检查权限：
-	// 1. 超级管理员可以重置任何用户的密码
-	// 2. 组织管理员只能重置同组织内的普通成员密码
-	if admin.Role != model.RoleSuperAdmin {
-		if admin.Role != model.RoleOrgAdmin ||
-			admin.OrganizationID != user.OrganizationID ||
-			user.Role == model.RoleOrgAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
-			return
-		}
-	}
-
-	// 加密新密码
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
-		return
-	}
-
-	// 更新密码
-	if err := database.DB.Model(&user).Update("password", string(hashedPassword)).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "password reset successfully",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "password reset successfully"})
 }
 
 // CreateAdmin 创建超级管理员（需要超级管理员权限）
+// @Summary      创建管理员
+// @Description  创建新的超级管理员（需要超级管理员权限）
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     Bearer
+// @Param        request body CreateAdminRequest true "管理员创建信息"
+// @Success      201  {object}  model.User
+// @Failure      400  {object}  response.ErrorResponse
+// @Failure      401  {object}  response.ErrorResponse
+// @Failure      403  {object}  response.ErrorResponse
+// @Router       /auth/create-admin [post]
 func (a *Auth) CreateAdmin(c *gin.Context) {
-	// 获取当前用户
-	currentUser, exists := c.Get("currentUser")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	// 验证当前用户是否为超级管理员
-	user := currentUser.(*model.User)
-	if user.Role != model.RoleSuperAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only super admin can create new admin users"})
-		return
-	}
-
 	var req CreateAdminRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 检查用户名在系统组织内是否已存在
-	var existingUser model.User
-	if err := database.DB.Where("username = ? AND organization_id = ?", req.Username, 1).First(&existingUser).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "username already exists in system organization"})
-		return
-	}
-
-	// 对密码进行加密
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	admin, err := a.authService.CreateAdmin(req.Username, req.Password, req.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 创建超级管理员用户
-	newAdmin := model.User{
-		Username:       req.Username,
-		Password:       string(hashedPassword),
-		Email:          req.Email,
-		Role:           model.RoleSuperAdmin,
-		OrganizationID: 1, // 系统组织ID
-	}
-
-	if err := database.DB.Create(&newAdmin).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create admin user"})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "admin user created successfully",
-		"user": gin.H{
-			"id":       newAdmin.ID,
-			"username": newAdmin.Username,
-			"email":    newAdmin.Email,
-			"role":     newAdmin.Role,
-		},
-	})
+	c.JSON(http.StatusCreated, admin)
 }

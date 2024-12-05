@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -12,15 +13,23 @@ const (
 	RoleOrgMember  = "org_member"  // 组织成员
 )
 
+// BaseModel 基础模型
+type BaseModel struct {
+	ID        uint           `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
 // User 用户模型
 type User struct {
-	gorm.Model
-	Username       string       `gorm:"size:32;not null" json:"username"`   // 用户名
-	Password       string       `gorm:"size:128;not null" json:"-"`         // 密码
-	Email          string       `gorm:"size:128" json:"email"`              // 邮箱
-	Role           string       `gorm:"size:32;not null" json:"role"`       // 角色
-	OrganizationID uint         `gorm:"default:0" json:"organization_id"`   // 组织ID
-	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"-"` // 所属组织，在json中忽略
+	BaseModel
+	Username       string       `gorm:"size:32;not null" json:"username" example:"john_doe"`   // 用户名
+	Password       string       `gorm:"size:128;not null" json:"-"`                           // 密码
+	Email          string       `gorm:"size:128" json:"email" example:"john@example.com"`     // 邮箱
+	Role           string       `gorm:"size:32;not null" json:"role" example:"org_member"`    // 角色
+	OrganizationID uint         `gorm:"default:0" json:"organization_id" example:"1"`         // 组织ID
+	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"-"`                   // 所属组织
 }
 
 // TableName 指定表名
@@ -49,7 +58,8 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	tx.Model(&User{}).Where("(username = ? OR email = ?) AND organization_id = ?",
 		u.Username, u.Email, u.OrganizationID).Count(&count)
 	if count > 0 {
-		return fmt.Errorf("username or email already exists in the organization")
+		return fmt.Errorf("username or email already exists in this organization")
 	}
+
 	return nil
 }

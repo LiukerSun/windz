@@ -6,9 +6,11 @@ app:
   name: "backend"
   port: 8080
   mode: "debug" # debug or release
+  default_password: "admin123" # 默认密码，用于初始化超级管理员账号
 
 database:
-  default: postgres  # mysql, postgres, or sqlite
+  type: postgres  # mysql, postgres, or sqlite
+  enable_log: true  # 是否启用数据库日志
   mysql:
     host: localhost
     port: 3306
