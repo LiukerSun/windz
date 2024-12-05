@@ -63,6 +63,23 @@ go run cmd/main.go
 - `pkg/`: 可重用的公共包
 - `logs/`: 日志文件目录
 
+## API 文档
+
+项目提供了Swagger API文档，您可以通过访问以下地址查看和测试API：
+
+```
+http://localhost:8080/swagger/index.html
+```
+
+## 默认密码
+
+在首次运行时，系统会创建一个超级管理员账号，默认密码为 `admin123`。您可以在配置文件中修改此密码：
+
+```yaml
+app:
+  default_password: "admin123" # 默认密码，用于初始化超级管理员账号
+```
+
 ## 开源协议
 
 MIT License
