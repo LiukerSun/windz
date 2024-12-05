@@ -81,6 +81,11 @@ func (s *AuthService) ChangePassword(userID uint, oldPassword, newPassword strin
 		return errors.New("invalid old password")
 	}
 
+	// 检查新密码是否与旧密码相同
+	if oldPassword == newPassword {
+		return errors.New("new password must be different from old password")
+	}
+
 	// 生成新密码哈希
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {

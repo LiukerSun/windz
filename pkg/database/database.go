@@ -3,6 +3,7 @@ package database
 import (
 	"backend/internal/model"
 	"backend/pkg/config"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -31,17 +32,45 @@ func Init() error {
 		},
 	}
 
+	// 配置日志级别
+	var logLevel gormlogger.LogLevel
+	switch config.GetString("database.log_level") {
+	case "silent":
+		logLevel = gormlogger.Silent
+	case "error":
+		logLevel = gormlogger.Error
+	case "warn":
+		logLevel = gormlogger.Warn
+	case "info":
+		logLevel = gormlogger.Info
+	default:
+		logLevel = gormlogger.Info
+	}
+
 	// 根据配置决定是否启用数据库日志
 	if config.GetBool("database.enable_log") {
-		gormConfig.Logger = gormlogger.New(
+		logConfig := gormlogger.Config{
+			SlowThreshold:             time.Second,
+			LogLevel:                  logLevel,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		}
+
+		// 自定义日志记录器
+		logger := gormlogger.New(
 			log.New(os.Stdout, "\r\n", log.LstdFlags),
-			gormlogger.Config{
-				SlowThreshold:             time.Second,
-				LogLevel:                  gormlogger.Info,
-				IgnoreRecordNotFoundError: true,
-				Colorful:                  true,
-			},
+			logConfig,
 		)
+
+		// 如果禁用SQL查询日志，创建一个自定义的日志记录器
+		if !config.GetBool("database.enable_sql_log") {
+			logger = &customLogger{
+				Interface: logger,
+				config:    logConfig,
+			}
+		}
+
+		gormConfig.Logger = logger
 	} else {
 		gormConfig.Logger = gormlogger.Default.LogMode(gormlogger.Silent)
 	}
@@ -148,4 +177,16 @@ func initSuperAdmin() error {
 	}
 
 	return nil
+}
+
+// customLogger 自定义日志记录器，用于控制SQL查询日志
+type customLogger struct {
+	gormlogger.Interface
+	config gormlogger.Config
+}
+
+// Trace 重写Trace方法以控制SQL查询日志
+func (l *customLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+	// 不记录SQL查询
+	return
 }

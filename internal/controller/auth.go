@@ -221,8 +221,15 @@ func (a *Auth) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetUint("user_id")
-	if err := a.authService.ChangePassword(userID, req.OldPassword, req.NewPassword); err != nil {
+	// 从上下文中获取当前用户
+	user, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	currentUser := user.(*model.User)
+
+	if err := a.authService.ChangePassword(currentUser.ID, req.OldPassword, req.NewPassword); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

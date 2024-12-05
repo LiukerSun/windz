@@ -1,23 +1,20 @@
 server:
   port: 8080
-  mode: debug  # debug or release
 
 app:
-  name: "backend"
-  port: 8080
-  mode: "debug" # debug or release
   default_password: "admin123" # 默认密码，用于初始化超级管理员账号
 
 database:
   type: postgres  # mysql, postgres, or sqlite
-  enable_log: true  # 是否启用数据库日志
+  enable_log: true  # 是否启用数据库日志（非SQL查询日志）
+  log_level: "info" # silent, error, warn, info
+  enable_sql_log: false # 是否启用SQL查询日志
   mysql:
     host: localhost
     port: 3306
     username: root
     password: root
     dbname: test
-    charset: utf8mb4
     max_idle_conns: 10
     max_open_conns: 100
   postgres:
@@ -26,22 +23,13 @@ database:
     username: postgres
     password: 
     dbname: windz
-    sslmode: disable
     max_idle_conns: 10
     max_open_conns: 100
   sqlite:
-    path: ./data.db
+    database: ./data.db
 
 log:
   level: "debug"  # debug, info, warn, error
   format: "console" # console or json
   output: "both" # stdout, file, or both
   file_path: "logs/app.log"
-  show_line: true
-  database_log: false  # 是否显示数据库日志
-  request_log: true   # 是否显示请求日志
-  filename: ./logs/app.log
-  max_size: 100    # megabytes
-  max_age: 7      # days
-  max_backups: 10
-  compress: false
