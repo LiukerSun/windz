@@ -74,7 +74,7 @@ func NewAuth() *Auth {
 
 // Login 普通用户登录
 // @Summary      用户登录
-// @Description  普通用户登录接口
+// @Description  普通用户登录接口，用于获取登录凭证
 // @Tags         auth
 // @Accept       json
 // @Produce      json

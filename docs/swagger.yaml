@@ -1,0 +1,509 @@
+basePath: /api/v1
+definitions:
+  controller.ChangePasswordRequest:
+    properties:
+      new_password:
+        maxLength: 32
+        minLength: 6
+        type: string
+      old_password:
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  controller.CreateAdminRequest:
+    properties:
+      email:
+        type: string
+      password:
+        maxLength: 32
+        minLength: 6
+        type: string
+      username:
+        maxLength: 32
+        minLength: 3
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+  controller.CreateOrganizationRequest:
+    properties:
+      code:
+        type: string
+      description:
+        type: string
+    required:
+    - code
+    type: object
+  controller.LoginRequest:
+    properties:
+      organization_code:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - organization_code
+    - password
+    - username
+    type: object
+  controller.LoginResponse:
+    properties:
+      organization:
+        type: string
+      role:
+        type: string
+      token:
+        type: string
+      user_id:
+        type: integer
+      username:
+        type: string
+    type: object
+  controller.RegisterRequest:
+    properties:
+      email:
+        type: string
+      organization_id:
+        description: 设为必填项
+        type: integer
+      password:
+        maxLength: 32
+        minLength: 6
+        type: string
+      username:
+        maxLength: 32
+        minLength: 3
+        type: string
+    required:
+    - email
+    - organization_id
+    - password
+    - username
+    type: object
+  controller.ResetPasswordRequest:
+    properties:
+      new_password:
+        maxLength: 32
+        minLength: 6
+        type: string
+      user_id:
+        type: integer
+    required:
+    - new_password
+    - user_id
+    type: object
+  controller.UpdateOrganizationRequest:
+    properties:
+      code:
+        type: string
+      description:
+        type: string
+    type: object
+  model.Organization:
+    properties:
+      code:
+        description: 组织代码
+        example: company_a
+        type: string
+      created_at:
+        type: string
+      description:
+        description: 组织描述
+        example: A sample organization
+        type: string
+      id:
+        type: integer
+      updated_at:
+        type: string
+      users:
+        description: 组织成员
+        items:
+          $ref: '#/definitions/model.User'
+        type: array
+    type: object
+  model.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        description: 邮箱
+        example: john@example.com
+        type: string
+      id:
+        type: integer
+      organization_id:
+        description: 组织ID
+        example: 1
+        type: integer
+      role:
+        description: 角色
+        example: org_member
+        type: string
+      updated_at:
+        type: string
+      username:
+        description: 用户名
+        example: john_doe
+        type: string
+    type: object
+  response.ErrorResponse:
+    properties:
+      error:
+        example: error message
+        type: string
+    type: object
+  response.SuccessResponse:
+    properties:
+      message:
+        example: operation successful
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is the API documentation for Windz Backend.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Windz Backend API
+  version: "1.0"
+paths:
+  /auth/change-password:
+    post:
+      consumes:
+      - application/json
+      description: 用户修改自己的密码
+      parameters:
+      - description: 密码修改信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 修改密码
+      tags:
+      - auth
+  /auth/create-admin:
+    post:
+      consumes:
+      - application/json
+      description: 创建新的超级管理员（需要超级管理员权限）
+      parameters:
+      - description: 管理员创建信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CreateAdminRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 创建管理员
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 普通用户登录接口，用于获取登录凭证
+      parameters:
+      - description: 登录信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: 用户登录
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: 注册新用户
+      parameters:
+      - description: 注册信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: 用户注册
+      tags:
+      - auth
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: 管理员重置用户密码
+      parameters:
+      - description: 密码重置信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 重置密码
+      tags:
+      - auth
+  /organizations:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有组织的列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.Organization'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 获取组织列表
+      tags:
+      - organizations
+    post:
+      consumes:
+      - application/json
+      description: 创建新的组织
+      parameters:
+      - description: 组织信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CreateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.Organization'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 创建组织
+      tags:
+      - organizations
+  /organizations/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 根据ID删除组织
+      parameters:
+      - description: 组织ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 删除组织
+      tags:
+      - organizations
+    get:
+      consumes:
+      - application/json
+      description: 根据ID获取组织详情
+      parameters:
+      - description: 组织ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Organization'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 获取组织详情
+      tags:
+      - organizations
+    put:
+      consumes:
+      - application/json
+      description: 根据ID更新组织信息
+      parameters:
+      - description: 组织ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 组织信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.UpdateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Organization'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 更新组织
+      tags:
+      - organizations
+securityDefinitions:
+  Bearer:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
