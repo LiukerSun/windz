@@ -19,7 +19,7 @@ func (s *AuthService) Login(username string, password string, organizationID uin
 		Where("username = ? AND organization_id = ? AND (role = ? OR role = ? OR role = ?)",
 			username, organizationID, model.RoleOrgMember, model.RoleOrgAdmin, model.RoleSuperAdmin).
 		First(&user).Error; err != nil {
-		return nil, "", errors.New("invalid username or password")
+		return nil, "", errors.New("错误的用户名/密码")
 	}
 
 	// 打印用户信息以帮助调试
@@ -27,13 +27,13 @@ func (s *AuthService) Login(username string, password string, organizationID uin
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return nil, "", errors.New("invalid username or password")
+		return nil, "", errors.New("错误的用户名/密码")
 	}
 
 	// 生成 token
 	token, err := jwt.GenerateToken(user.ID, user.Username, user.Role, user.OrganizationID)
 	if err != nil {
-		return nil, "", errors.New("failed to generate token")
+		return nil, "", errors.New("生成token失败")
 	}
 
 	return &user, token, nil
@@ -45,13 +45,13 @@ func (s *AuthService) Register(username, password, email string, organizationID 
 	var count int64
 	database.DB.Model(&model.User{}).Where("username = ? AND organization_id = ?", username, organizationID).Count(&count)
 	if count > 0 {
-		return nil, errors.New("username already exists in this organization")
+		return nil, errors.New("用户名已存在于此组织")
 	}
 
 	// 创建用户
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, errors.New("failed to hash password")
+		return nil, errors.New("密码哈希失败")
 	}
 
 	user := model.User{
@@ -63,7 +63,7 @@ func (s *AuthService) Register(username, password, email string, organizationID 
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {
-		return nil, errors.New("failed to create user")
+		return nil, errors.New("创建用户失败")
 	}
 
 	return &user, nil
@@ -73,29 +73,29 @@ func (s *AuthService) Register(username, password, email string, organizationID 
 func (s *AuthService) ChangePassword(userID uint, oldPassword, newPassword string) error {
 	var user model.User
 	if err := database.DB.First(&user, userID).Error; err != nil {
-		return errors.New("user not found")
+		return errors.New("用户不存在")
 	}
 
 	// 验证旧密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
-		return errors.New("invalid old password")
+		return errors.New("旧密码错误")
 	}
 
 	// 检查新密码是否与旧密码相同
 	if oldPassword == newPassword {
-		return errors.New("new password must be different from old password")
+		return errors.New("新密码不能与旧密码相同")
 	}
 
 	// 生成新密码哈希
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return errors.New("failed to hash password")
+		return errors.New("密码哈希失败")
 	}
 
 	// 更新密码
 	user.Password = string(hashedPassword)
 	if err := database.DB.Save(&user).Error; err != nil {
-		return errors.New("failed to update password")
+		return errors.New("密码更新失败")
 	}
 
 	return nil
@@ -105,19 +105,19 @@ func (s *AuthService) ChangePassword(userID uint, oldPassword, newPassword strin
 func (s *AuthService) ResetPassword(userID uint, newPassword string) error {
 	var user model.User
 	if err := database.DB.First(&user, userID).Error; err != nil {
-		return errors.New("user not found")
+		return errors.New("用户不存在")
 	}
 
 	// 生成新密码哈希
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return errors.New("failed to hash password")
+		return errors.New("密码哈希失败")
 	}
 
 	// 更新密码
 	user.Password = string(hashedPassword)
 	if err := database.DB.Save(&user).Error; err != nil {
-		return errors.New("failed to reset password")
+		return errors.New("密码更新失败")
 	}
 
 	return nil
@@ -129,13 +129,13 @@ func (s *AuthService) CreateAdmin(username, password, email string) (*model.User
 	var count int64
 	database.DB.Model(&model.User{}).Where("username = ? AND role = ?", username, model.RoleSuperAdmin).Count(&count)
 	if count > 0 {
-		return nil, errors.New("admin username already exists")
+		return nil, errors.New("管理员用户名已存在")
 	}
 
 	// 创建管理员用户
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, errors.New("failed to hash password")
+		return nil, errors.New("密码哈希失败")
 	}
 
 	admin := model.User{
@@ -146,7 +146,7 @@ func (s *AuthService) CreateAdmin(username, password, email string) (*model.User
 	}
 
 	if err := database.DB.Create(&admin).Error; err != nil {
-		return nil, errors.New("failed to create admin")
+		return nil, errors.New("管理员创建失败")
 	}
 
 	return &admin, nil

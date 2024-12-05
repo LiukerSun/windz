@@ -16,7 +16,7 @@ func RequireAuth() gin.HandlerFunc {
 		// 从请求头获取 token
 		token := c.GetHeader("Authorization")
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "authorization header is required"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "需要授权头信息"})
 			c.Abort()
 			return
 		}
@@ -27,7 +27,7 @@ func RequireAuth() gin.HandlerFunc {
 		// 解析 token
 		claims, err := jwt.ParseToken(token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的令牌"})
 			c.Abort()
 			return
 		}
@@ -35,7 +35,7 @@ func RequireAuth() gin.HandlerFunc {
 		// 从数据库获取用户信息
 		var user model.User
 		if err := database.DB.First(&user, claims.UserID).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized access"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权访问"})
 			c.Abort()
 			return
 		}
@@ -52,7 +52,7 @@ func RequireSuperAdmin() gin.HandlerFunc {
 		// 获取当前用户
 		user, exists := c.Get("currentUser")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 			c.Abort()
 			return
 		}
@@ -60,7 +60,7 @@ func RequireSuperAdmin() gin.HandlerFunc {
 		// 检查用户角色
 		currentUser := user.(*model.User)
 		if currentUser.Role != model.RoleSuperAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "super admin permission required"})
+			c.JSON(http.StatusForbidden, gin.H{"error": "需要超级管理员权限"})
 			c.Abort()
 			return
 		}
@@ -75,7 +75,7 @@ func RequireOrgAdmin() gin.HandlerFunc {
 		// 获取当前用户
 		user, exists := c.Get("currentUser")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 			c.Abort()
 			return
 		}
@@ -83,7 +83,7 @@ func RequireOrgAdmin() gin.HandlerFunc {
 		// 检查用户角色
 		currentUser := user.(*model.User)
 		if currentUser.Role != model.RoleSuperAdmin && currentUser.Role != model.RoleOrgAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "organization admin permission required"})
+			c.JSON(http.StatusForbidden, gin.H{"error": "需要组织管理员权限"})
 			c.Abort()
 			return
 		}

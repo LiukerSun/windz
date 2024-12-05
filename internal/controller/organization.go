@@ -47,7 +47,7 @@ func NewOrganization() *Organization {
 func (o *Organization) Create(c *gin.Context) {
 	var req CreateOrganizationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求数据无效"})
 		return
 	}
 
@@ -74,7 +74,7 @@ func (o *Organization) Create(c *gin.Context) {
 func (o *Organization) List(c *gin.Context) {
 	orgs, err := o.orgService.List()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取组织列表失败"})
 		return
 	}
 	c.JSON(http.StatusOK, orgs)
@@ -97,13 +97,13 @@ func (o *Organization) Get(c *gin.Context) {
 	id := c.Param("id")
 	var orgID uint
 	if _, err := fmt.Sscanf(id, "%d", &orgID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "组织ID无效"})
 		return
 	}
 
 	org, err := o.orgService.Get(orgID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到该组织"})
 		return
 	}
 	c.JSON(http.StatusOK, org)
@@ -127,19 +127,19 @@ func (o *Organization) Update(c *gin.Context) {
 	id := c.Param("id")
 	var orgID uint
 	if _, err := fmt.Sscanf(id, "%d", &orgID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "组织ID无效"})
 		return
 	}
 
 	var req UpdateOrganizationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求数据无效"})
 		return
 	}
 
 	org, err := o.orgService.Update(orgID, req.Code, req.Description)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到该组织"})
 		return
 	}
 	c.JSON(http.StatusOK, org)
@@ -161,13 +161,13 @@ func (o *Organization) Delete(c *gin.Context) {
 	id := c.Param("id")
 	var orgID uint
 	if _, err := fmt.Sscanf(id, "%d", &orgID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "组织ID无效"})
 		return
 	}
 
 	if err := o.orgService.Delete(orgID); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到该组织"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Organization deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "组织删除成功"})
 }

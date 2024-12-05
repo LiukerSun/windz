@@ -14,7 +14,7 @@ var (
 	// TokenExpireDuration token 过期时间
 	TokenExpireDuration = time.Hour * 24
 
-	ErrInvalidToken = errors.New("invalid token")
+	ErrInvalidToken = errors.New("token不合法")
 )
 
 // CustomClaims 自定义声明

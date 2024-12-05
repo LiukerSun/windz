@@ -83,11 +83,11 @@ func Init() error {
 	case "sqlite":
 		DB, err = connectSQLite(gormConfig)
 	default:
-		return fmt.Errorf("unsupported database type: %s", dbType)
+		return fmt.Errorf("不支持的数据库类型: %s", dbType)
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %v", err)
+		return fmt.Errorf("连接数据库失败: %v", err)
 	}
 
 	// 自动迁移数据库结构
@@ -95,12 +95,12 @@ func Init() error {
 		&model.User{},
 		&model.Organization{},
 	); err != nil {
-		return fmt.Errorf("failed to auto migrate database: %v", err)
+		return fmt.Errorf("数据库自动迁移失败: %v", err)
 	}
 
 	// 初始化超级管理员账号
 	if err := initSuperAdmin(); err != nil {
-		return fmt.Errorf("failed to init super admin: %v", err)
+		return fmt.Errorf("初始化超级管理员失败: %v", err)
 	}
 
 	return nil
@@ -136,7 +136,7 @@ func connectSQLite(gormConfig *gorm.Config) (*gorm.DB, error) {
 func initSuperAdmin() error {
 	var count int64
 	if err := DB.Model(&model.User{}).Where("role = ?", "super_admin").Count(&count).Error; err != nil {
-		return fmt.Errorf("failed to check super admin existence: %w", err)
+		return fmt.Errorf("检查超级管理员是否存在失败: %w", err)
 	}
 
 	// 如果已经存在超级管理员，则不需要创建
@@ -147,10 +147,10 @@ func initSuperAdmin() error {
 	// 创建系统组织
 	org := &model.Organization{
 		Code:        "system",
-		Description: "System Organization",
+		Description: "系统组织",
 	}
 	if err := DB.Create(org).Error; err != nil {
-		return fmt.Errorf("failed to create system organization: %w", err)
+		return fmt.Errorf("创建系统组织失败: %w", err)
 	}
 
 	// 获取默认密码
@@ -162,7 +162,7 @@ func initSuperAdmin() error {
 	// 生成密码哈希
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
+		return fmt.Errorf("密码加密失败: %w", err)
 	}
 
 	// 创建超级管理员账号
@@ -173,7 +173,7 @@ func initSuperAdmin() error {
 		OrganizationID: org.ID,
 	}
 	if err := DB.Create(admin).Error; err != nil {
-		return fmt.Errorf("failed to create super admin: %w", err)
+		return fmt.Errorf("创建超级管理员失败: %w", err)
 	}
 
 	return nil
@@ -187,6 +187,5 @@ type customLogger struct {
 
 // Trace 重写Trace方法以控制SQL查询日志
 func (l *customLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	// 不记录SQL查询
-	return
+	// 不记录SQL查询，直接返回即可，无需return语句
 }

@@ -117,7 +117,7 @@ func (a *Auth) AdminLogin(c *gin.Context) {
 	var user model.User
 	var systemOrg model.Organization
 	if err := database.DB.Where("code = ?", "system").First(&systemOrg).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "system organization not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "system 组织未找到"})
 		return
 	}
 
@@ -125,20 +125,20 @@ func (a *Auth) AdminLogin(c *gin.Context) {
 		Where("username = ? AND role = ? AND organization_id = ?",
 			req.Username, model.RoleSuperAdmin, systemOrg.ID).
 		First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "错误的用户名/密码"})
 		return
 	}
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "错误的用户名/密码"})
 		return
 	}
 
 	// 生成 token
 	token, err := jwt.GenerateToken(user.ID, user.Username, user.Role, user.OrganizationID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成token失败"})
 		return
 	}
 
@@ -182,14 +182,14 @@ func (a *Auth) Register(c *gin.Context) {
 func (a *Auth) GetCurrentUser(c *gin.Context) {
 	user, exists := c.Get("currentUser")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 		return
 	}
 
 	currentUser := user.(*model.User)
 	var org model.Organization
 	if err := database.DB.First(&org, currentUser.OrganizationID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch organization"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取组织信息失败"})
 		return
 	}
 
@@ -224,7 +224,7 @@ func (a *Auth) ChangePassword(c *gin.Context) {
 	// 从上下文中获取当前用户
 	user, exists := c.Get("currentUser")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 		return
 	}
 	currentUser := user.(*model.User)
@@ -234,7 +234,7 @@ func (a *Auth) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
 }
 
 // ResetPassword 重置用户密码（需要管理员权限）
@@ -262,7 +262,7 @@ func (a *Auth) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "password reset successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "密码重置成功"})
 }
 
 // CreateAdmin 创建超级管理员（需要超级管理员权限）
